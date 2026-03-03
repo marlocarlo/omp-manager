@@ -142,9 +142,9 @@ jobs:
 
           New-Item -ItemType Directory -Force -Path choco/tools
 
-          @"
+          $nuspec = @"
           <?xml version="1.0" encoding="utf-8"?>
-          <package xmlns="http://schemas.chocolatey.org/packaging/2015/06/nuspec.xsd">
+          <package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
             <metadata>
               <id>omp-manager</id>
               <version>$version</version>
@@ -154,13 +154,17 @@ jobs:
               <projectUrl>https://github.com/marlocarlo/omp-manager</projectUrl>
               <licenseUrl>https://github.com/marlocarlo/omp-manager/blob/master/LICENSE</licenseUrl>
               <requireLicenseAcceptance>false</requireLicenseAcceptance>
-              <description>A TUI manager for Oh My Posh - browse themes, install fonts, and configure shells with zero effort.</description>
-              <tags>oh-my-posh prompt theme tui terminal</tags>
+              <description>A TUI manager for Oh My Posh — browse themes, install fonts, and configure shells with zero effort.</description>
+              <summary>TUI manager for Oh My Posh prompt theming</summary>
+              <tags>oh-my-posh prompt theme tui terminal cli</tags>
+              <packageSourceUrl>https://github.com/marlocarlo/omp-manager</packageSourceUrl>
+              <bugTrackerUrl>https://github.com/marlocarlo/omp-manager/issues</bugTrackerUrl>
             </metadata>
           </package>
-          "@ | Out-File -Encoding utf8 choco/omp-manager.nuspec
+          "@
+          [System.IO.File]::WriteAllText("$PWD/choco/omp-manager.nuspec", $nuspec.Trim())
 
-          @"
+          $install = @"
           `$ErrorActionPreference = 'Stop'
           `$toolsDir = Split-Path -Parent `$MyInvocation.MyCommand.Definition
           `$url = '$url'
@@ -171,7 +175,8 @@ jobs:
             -UnzipLocation `$toolsDir ``
             -Checksum64 `$checksum ``
             -ChecksumType64 'sha256'
-          "@ | Out-File -Encoding utf8 choco/tools/chocolateyinstall.ps1
+          "@
+          [System.IO.File]::WriteAllText("$PWD/choco/tools/chocolateyinstall.ps1", $install.Trim())
 
           choco pack choco/omp-manager.nuspec --output-directory choco
 
@@ -210,11 +215,90 @@ jobs:
       - name: Install wingetcreate
         shell: pwsh
         run: |
+          $ProgressPreference = 'SilentlyContinue'
           Invoke-WebRequest -Uri "https://aka.ms/wingetcreate/latest" -OutFile wingetcreate.exe
 
       - name: Submit to winget-pkgs
         shell: pwsh
         run: |
           $version = "${{ steps.version.outputs.VERSION }}"
+          $sha256  = "${{ steps.checksum.outputs.SHA256 }}"
           $url = "https://github.com/marlocarlo/omp-manager/releases/download/${{ github.ref_name }}/omp-manager-x86_64-pc-windows-msvc.zip"
-          ./wingetcreate.exe update marlocarlo.omp-manager --version $version --urls $url --token ${{ secrets.WINGET_GH_PAT }} --submit
+
+          # Try update first (works when the package already exists in winget-pkgs)
+          ./wingetcreate.exe update marlocarlo.OmpManager `
+            --version $version --urls $url `
+            --token ${{ secrets.WINGET_GH_PAT }} --submit 2>&1 | Tee-Object -Variable updateOutput
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Package not yet in winget-pkgs — creating initial manifest..."
+
+            $manifestDir = "manifests/m/marlocarlo/OmpManager/$version"
+            New-Item -ItemType Directory -Force -Path $manifestDir
+
+            # Version manifest
+            @"
+          # Created using GitHub Actions automated release pipeline
+          # yaml-language-server: `$schema=https://aka.ms/winget-manifest.version.1.6.0.schema.json
+          PackageIdentifier: marlocarlo.OmpManager
+          PackageVersion: $version
+          DefaultLocale: en-US
+          ManifestType: version
+          ManifestVersion: 1.6.0
+          "@ | ForEach-Object { $_.Trim() } | Set-Content -Path "$manifestDir/marlocarlo.OmpManager.yaml" -Encoding utf8NoBOM
+
+            # Installer manifest
+            @"
+          # yaml-language-server: `$schema=https://aka.ms/winget-manifest.installer.1.6.0.schema.json
+          PackageIdentifier: marlocarlo.OmpManager
+          PackageVersion: $version
+          InstallerType: zip
+          NestedInstallerType: portable
+          NestedInstallerFiles:
+            - RelativeFilePath: omp-manager.exe
+              PortableCommandAlias: omp-manager
+          Installers:
+            - Architecture: x64
+              InstallerUrl: $url
+              InstallerSha256: $sha256
+          ManifestType: installer
+          ManifestVersion: 1.6.0
+          "@ | ForEach-Object { $_.Trim() } | Set-Content -Path "$manifestDir/marlocarlo.OmpManager.installer.yaml" -Encoding utf8NoBOM
+
+            # Locale manifest
+            @"
+          # yaml-language-server: `$schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+          PackageIdentifier: marlocarlo.OmpManager
+          PackageVersion: $version
+          PackageLocale: en-US
+          Publisher: marlocarlo
+          PublisherUrl: https://github.com/marlocarlo
+          PackageName: OMP Manager
+          PackageUrl: https://github.com/marlocarlo/omp-manager
+          License: MIT
+          LicenseUrl: https://github.com/marlocarlo/omp-manager/blob/master/LICENSE
+          ShortDescription: A TUI manager for Oh My Posh — browse themes, install fonts, and configure shells
+          Description: A terminal user interface to browse themes, install Nerd Fonts, and configure shell profiles for Oh My Posh with zero effort.
+          Tags:
+            - cli
+            - oh-my-posh
+            - prompt
+            - terminal
+            - tui
+          ManifestType: defaultLocale
+          ManifestVersion: 1.6.0
+          "@ | ForEach-Object { $_.Trim() } | Set-Content -Path "$manifestDir/marlocarlo.OmpManager.locale.en-US.yaml" -Encoding utf8NoBOM
+
+            Write-Host "Generated manifests in $manifestDir"
+            Get-ChildItem -Recurse $manifestDir | ForEach-Object { Write-Host $_.FullName }
+
+            # Validate and submit
+            ./wingetcreate.exe submit $manifestDir `
+              --prtitle "New package: marlocarlo.OmpManager version $version" `
+              --token ${{ secrets.WINGET_GH_PAT }}
+
+            if ($LASTEXITCODE -ne 0) {
+              Write-Error "wingetcreate submit failed"
+              exit 1
+            }
+          }

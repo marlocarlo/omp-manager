@@ -296,13 +296,16 @@ pub fn download_theme(name: &str, dest_dir: &Path) -> Result<PathBuf, String> {
     #[cfg(target_os = "windows")]
     {
         let ps_cmd = format!(
-            "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \
+            "$ProgressPreference = 'SilentlyContinue'; \
+             [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \
              Invoke-WebRequest -Uri '{}' -OutFile '{}' -UseBasicParsing",
             url,
             dest.to_string_lossy()
         );
         let output = std::process::Command::new("powershell")
             .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &ps_cmd])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
             .output()
             .map_err(|e| format!("Failed to run PowerShell: {e}"))?;
         if !output.status.success() {
@@ -315,6 +318,8 @@ pub fn download_theme(name: &str, dest_dir: &Path) -> Result<PathBuf, String> {
     {
         let output = std::process::Command::new("curl")
             .args(["-fsSL", "-o", &dest.to_string_lossy(), &url])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
             .output()
             .map_err(|e| format!("Failed to run curl: {e}"))?;
         if !output.status.success() {

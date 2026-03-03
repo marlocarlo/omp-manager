@@ -1,6 +1,6 @@
 [package]
 name = "omp-manager"
-version = "0.1.0"
+version = "0.1.2"
 edition = "2021"
 description = "A TUI manager for Oh My Posh - browse themes, install fonts, and configure shells with zero effort"
 license = "MIT"

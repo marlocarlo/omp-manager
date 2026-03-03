@@ -44,8 +44,10 @@ fn install_omp_windows() -> OpResult {
             let result2 = Command::new("powershell")
                 .args([
                     "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
-                    "Set-ExecutionPolicy Bypass -Scope Process -Force; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://ohmyposh.dev/install.ps1'))"
+                    "$ProgressPreference = 'SilentlyContinue'; Set-ExecutionPolicy Bypass -Scope Process -Force; Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://ohmyposh.dev/install.ps1'))"
                 ])
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
                 .output();
             match result2 {
                 Ok(o) if o.status.success() => OpResult {

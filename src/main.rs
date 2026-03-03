@@ -15,13 +15,13 @@ mod theme;
 mod themes;
 mod ui;
 
-use std::io::{self, BufWriter};
+use std::io;
 use std::time::Duration;
 
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers, MouseButton, MouseEventKind},
-    execute, queue,
-    terminal::{disable_raw_mode, enable_raw_mode, BeginSynchronizedUpdate, EndSynchronizedUpdate, EnterAlternateScreen, LeaveAlternateScreen},
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 
@@ -42,11 +42,7 @@ async fn main() -> anyhow::Result<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
-    // 1 MiB BufWriter ensures the entire frame (escape-sequences for every
-    // changed cell) fits in a single buffer, so `flush()` emits one large
-    // write() syscall instead of many 8 KiB partial writes that the
-    // terminal would render individually, causing a visible flicker.
-    let backend = CrosstermBackend::new(BufWriter::with_capacity(1_048_576, stdout));
+    let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
     // Run
@@ -63,22 +59,15 @@ async fn main() -> anyhow::Result<()> {
 // ── Event loop ───────────────────────────────────────────────────────────────
 
 fn run_app(
-    terminal: &mut Terminal<CrosstermBackend<BufWriter<io::Stdout>>>,
+    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     app: &mut App,
 ) -> anyhow::Result<()> {
-    let mut needs_redraw = true;
-
     loop {
-        // Draw only when state has changed (prevents flickering from constant redraws)
-        if needs_redraw {
-            // Synchronized update: tell the terminal to buffer all screen
-            // writes until EndSynchronizedUpdate, then paint in one pass.
-            // Combined with the 1 MiB BufWriter this guarantees flicker-free
-            // atomic frame updates on Windows Terminal, ConPTY, etc.
-            queue!(terminal.backend_mut(), BeginSynchronizedUpdate)?;
-            terminal.draw(|f| ui::draw(f, app))?;
-            execute!(terminal.backend_mut(), EndSynchronizedUpdate)?;
-            needs_redraw = false;
+        // Draw every frame (ratatui diffs internally – unchanged frames are cheap)
+        terminal.draw(|f| ui::draw(f, app))?;
+
+        if !app.running {
+            return Ok(());
         }
 
         // Poll events (~20 fps)
@@ -97,14 +86,9 @@ fn run_app(
                     } else {
                         handle_normal_input(app, key.code, key.modifiers);
                     }
-                    needs_redraw = true;
                 }
                 Event::Mouse(mouse) => {
                     handle_mouse(app, mouse.kind, mouse.column, mouse.row);
-                    needs_redraw = true;
-                }
-                Event::Resize(_, _) => {
-                    needs_redraw = true;
                 }
                 _ => {}
             }
@@ -113,19 +97,10 @@ fn run_app(
         // Tick status message countdown
         if app.status.tick > 0 {
             app.tick_status();
-            needs_redraw = true;
         }
 
         // Apply any completed background theme downloads
-        let prev_downloading = app.theme_downloading.len();
         app.poll_theme_downloads();
-        if app.theme_downloading.len() != prev_downloading {
-            needs_redraw = true;
-        }
-
-        if !app.running {
-            return Ok(());
-        }
     }
 }
 

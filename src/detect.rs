@@ -162,7 +162,9 @@ fn list_nerd_fonts() -> Vec<String> {
                      Select-Object -ExpandProperty Name
         "#;
         Command::new("powershell")
-            .args(["-NoProfile", "-Command", script])
+            .args(["-NoProfile", "-Command", &format!("$ProgressPreference = 'SilentlyContinue'; {}", script)])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
             .output()
             .ok()
             .and_then(|o| String::from_utf8(o.stdout).ok())
