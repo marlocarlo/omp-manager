@@ -76,7 +76,7 @@ fn draw_header(f: &mut Frame, area: Rect, app: &App) {
     let mut spans = vec![
         Span::styled(" ", Style::default().bg(BG)),
         Span::styled(" OMP ", Style::default().fg(BG).bg(ACCENT).add_modifier(Modifier::BOLD)),
-        Span::styled("  Oh My Posh Manager", Style::default().fg(TEXT_DIM)),
+        Span::styled("  Oh My Posh Manager", Style::default().fg(TEXT_DIM).bg(BG)),
     ];
 
     // Show OMP version on the right if installed
@@ -85,11 +85,11 @@ fn draw_header(f: &mut Frame, area: Rect, app: &App) {
         let used = 28usize;
         let pad = (area.width as usize).saturating_sub(used + version_info.len() + 2);
         spans.push(Span::styled(" ".repeat(pad), Style::default().bg(BG)));
-        spans.push(Span::styled(version_info, Style::default().fg(ACCENT2)));
+        spans.push(Span::styled(version_info, Style::default().fg(ACCENT2).bg(BG)));
     }
 
     let header = Paragraph::new(vec![
-        Line::from(""),
+        Line::from(Span::styled(" ", Style::default().bg(BG))),
         Line::from(spans),
     ]).style(Style::default().bg(BG));
     f.render_widget(header, area);
@@ -100,7 +100,7 @@ fn draw_header(f: &mut Frame, area: Rect, app: &App) {
 fn draw_divider(f: &mut Frame, area: Rect) {
     let divider = "─".repeat(area.width as usize);
     f.render_widget(
-        Paragraph::new(Span::styled(divider, Style::default().fg(TEXT_DARK)))
+        Paragraph::new(Span::styled(divider, Style::default().fg(TEXT_DARK).bg(BG)))
             .style(Style::default().bg(BG)),
         area,
     );
@@ -113,17 +113,17 @@ fn draw_tabs(f: &mut Frame, area: Rect, app: &mut App) {
 
     let tab_titles: Vec<Line> = Tab::ALL.iter().map(|t| {
         let style = if *t == app.tab {
-            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)
+            Style::default().fg(ACCENT).bg(BG).add_modifier(Modifier::BOLD)
         } else {
-            Style::default().fg(TEXT_DIM)
+            Style::default().fg(TEXT_DIM).bg(BG)
         };
         Line::from(Span::styled(format!(" {} ", t.label()), style))
     }).collect();
 
     let tabs = Tabs::new(tab_titles)
         .select(app.tab.index())
-        .highlight_style(Style::default().fg(ACCENT).add_modifier(Modifier::BOLD | Modifier::UNDERLINED))
-        .divider(Span::styled(" │ ", Style::default().fg(TEXT_DARK)))
+        .highlight_style(Style::default().fg(ACCENT).bg(BG).add_modifier(Modifier::BOLD | Modifier::UNDERLINED))
+        .divider(Span::styled(" │ ", Style::default().fg(TEXT_DARK).bg(BG)))
         .block(
             UiBlock::default()
                 .borders(Borders::BOTTOM)
@@ -811,6 +811,8 @@ fn draw_theme_detail(f: &mut Frame, area: Rect, app: &App) {
 
 fn draw_status(f: &mut Frame, area: Rect, app: &App) {
     if app.status.tick == 0 || app.status.text.is_empty() {
+        // Even with no status, explicitly paint the area so ratatui doesn't skip it
+        f.render_widget(Paragraph::new("").style(Style::default().bg(BG)), area);
         return;
     }
     let bg_color = if app.status.is_error { RED } else { GREEN };
@@ -818,7 +820,7 @@ fn draw_status(f: &mut Frame, area: Rect, app: &App) {
         Paragraph::new(Span::styled(
             format!(" {} ", app.status.text),
             Style::default().fg(BG).bg(bg_color).add_modifier(Modifier::BOLD),
-        )),
+        )).style(Style::default().bg(BG)),
         area,
     );
 }
@@ -848,7 +850,7 @@ fn draw_footer(f: &mut Frame, area: Rect, app: &App) {
         ]
     }).collect();
 
-    f.render_widget(Paragraph::new(Line::from(spans)), area);
+    f.render_widget(Paragraph::new(Line::from(spans)).style(Style::default().bg(BG)), area);
 }
 
 // ── Confirm overlay ──────────────────────────────────────────────────────────

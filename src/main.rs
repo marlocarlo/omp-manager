@@ -15,13 +15,13 @@ mod theme;
 mod themes;
 mod ui;
 
-use std::io;
+use std::io::{self, BufWriter};
 use std::time::Duration;
 
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers, MouseButton, MouseEventKind},
-    execute, queue,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen, BeginSynchronizedUpdate, EndSynchronizedUpdate},
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 
@@ -42,7 +42,10 @@ async fn main() -> anyhow::Result<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
-    let backend = CrosstermBackend::new(stdout);
+    // Wrap stdout in BufWriter so ratatui flushes full frames atomically,
+    // preventing the partial-paint tearing that raw synchronized-update
+    // escape sequences caused on some Windows terminals.
+    let backend = CrosstermBackend::new(BufWriter::new(stdout));
     let mut terminal = Terminal::new(backend)?;
 
     // Run
@@ -59,7 +62,7 @@ async fn main() -> anyhow::Result<()> {
 // ── Event loop ───────────────────────────────────────────────────────────────
 
 fn run_app(
-    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+    terminal: &mut Terminal<CrosstermBackend<BufWriter<io::Stdout>>>,
     app: &mut App,
 ) -> anyhow::Result<()> {
     let mut needs_redraw = true;
@@ -67,11 +70,7 @@ fn run_app(
     loop {
         // Draw only when state has changed (prevents flickering from constant redraws)
         if needs_redraw {
-            // Synchronized update: terminal buffers all changes and applies them
-            // atomically, eliminating visible tearing / flicker.
-            queue!(terminal.backend_mut(), BeginSynchronizedUpdate)?;
             terminal.draw(|f| ui::draw(f, app))?;
-            execute!(terminal.backend_mut(), EndSynchronizedUpdate)?;
             needs_redraw = false;
         }
 
