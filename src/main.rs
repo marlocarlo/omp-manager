@@ -20,8 +20,8 @@ use std::time::Duration;
 
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers, MouseButton, MouseEventKind},
-    execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    execute, queue,
+    terminal::{disable_raw_mode, enable_raw_mode, BeginSynchronizedUpdate, EndSynchronizedUpdate, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 
@@ -42,10 +42,11 @@ async fn main() -> anyhow::Result<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
-    // Wrap stdout in BufWriter so ratatui flushes full frames atomically,
-    // preventing the partial-paint tearing that raw synchronized-update
-    // escape sequences caused on some Windows terminals.
-    let backend = CrosstermBackend::new(BufWriter::new(stdout));
+    // 1 MiB BufWriter ensures the entire frame (escape-sequences for every
+    // changed cell) fits in a single buffer, so `flush()` emits one large
+    // write() syscall instead of many 8 KiB partial writes that the
+    // terminal would render individually, causing a visible flicker.
+    let backend = CrosstermBackend::new(BufWriter::with_capacity(1_048_576, stdout));
     let mut terminal = Terminal::new(backend)?;
 
     // Run
@@ -70,7 +71,13 @@ fn run_app(
     loop {
         // Draw only when state has changed (prevents flickering from constant redraws)
         if needs_redraw {
+            // Synchronized update: tell the terminal to buffer all screen
+            // writes until EndSynchronizedUpdate, then paint in one pass.
+            // Combined with the 1 MiB BufWriter this guarantees flicker-free
+            // atomic frame updates on Windows Terminal, ConPTY, etc.
+            queue!(terminal.backend_mut(), BeginSynchronizedUpdate)?;
             terminal.draw(|f| ui::draw(f, app))?;
+            execute!(terminal.backend_mut(), EndSynchronizedUpdate)?;
             needs_redraw = false;
         }
 
