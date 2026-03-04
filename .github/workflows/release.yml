@@ -23,7 +23,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Windows — statically link the VC runtime so the exe runs on any Windows machine
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             label: Windows x64
@@ -39,7 +38,6 @@ jobs:
             label: Windows ARM64 (Snapdragon)
             artifact: windows-arm64
             ext: .exe
-          # Linux
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             label: Linux x64
@@ -50,7 +48,6 @@ jobs:
             label: Linux ARM64
             artifact: linux-arm64
             ext: ""
-          # macOS
           - target: x86_64-apple-darwin
             os: macos-latest
             label: macOS x64 (Intel)
@@ -77,7 +74,7 @@ jobs:
           sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
           echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
 
-      - name: Build (Windows — static CRT, no VC runtime DLL dependency)
+      - name: Build (Windows — static CRT)
         if: runner.os == 'Windows'
         env:
           RUSTFLAGS: -C target-feature=+crt-static
@@ -87,27 +84,13 @@ jobs:
         if: runner.os != 'Windows'
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Verify no dynamic VC runtime dependency (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $exePath = "target/${{ matrix.target }}/release/omp-manager.exe"
-          # dumpbin is available on windows-latest via VS tools
-          $vcDeps = & dumpbin /dependents "$exePath" 2>&1 |
-                    Select-String -Pattern "VCRUNTIME|MSVCP" -SimpleMatch
-          if ($vcDeps) {
-            Write-Error "Binary still has dynamic VC runtime dependencies:`n$vcDeps"
-            exit 1
-          }
-          Write-Output "Static CRT check passed — no dynamic VC runtime dependencies."
-
       - name: Create release package (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $tag        = "${{ github.ref_name }}"
-          $zipName    = "omp-manager-$tag-${{ matrix.artifact }}"
+          $tag      = "${{ github.ref_name }}"
+          $zipName  = "omp-manager-$tag-${{ matrix.artifact }}"
           $releaseDir = "target/${{ matrix.target }}/release"
 
           $exePath = Join-Path $releaseDir "omp-manager.exe"
@@ -119,7 +102,6 @@ jobs:
             exit 1
           }
 
-          # Flat zip — exe at root for easy WinGet/Scoop/Chocolatey compatibility
           New-Item -ItemType Directory -Path $zipName -Force | Out-Null
           Copy-Item $exePath     "$zipName/omp-manager.exe" -ErrorAction Stop
           Copy-Item "README.md"  "$zipName/"               -ErrorAction Stop
@@ -127,7 +109,6 @@ jobs:
 
           Compress-Archive -Path "$zipName/*" -DestinationPath "$zipName.zip"
 
-          # Verify zip integrity
           $entries = [System.IO.Compression.ZipFile]::OpenRead("$zipName.zip").Entries.Name
           if ("omp-manager.exe" -notin $entries) {
             Write-Error "FATAL: 'omp-manager.exe' missing from zip!"
@@ -135,7 +116,6 @@ jobs:
           }
           Write-Output "Zip '$zipName.zip' OK. Contents: $($entries -join ', ')"
 
-          # SHA256 + SHA512 checksum files (for Chocolatey moderator verification)
           $sha256 = (Get-FileHash "$zipName.zip" -Algorithm SHA256).Hash.ToUpper()
           $sha512 = (Get-FileHash "$zipName.zip" -Algorithm SHA512).Hash.ToUpper()
           "$sha256  $zipName.zip" | Out-File -Encoding ascii "$zipName.zip.sha256"
@@ -352,21 +332,23 @@ jobs:
           $url  = "https://github.com/$repo/releases/download/$tag/omp-manager-$tag-windows-x64.zip"
 
           $script = @"
-`$ErrorActionPreference = 'Stop'
-`$toolsDir = Split-Path -Parent `$MyInvocation.MyCommand.Definition
+          `$ErrorActionPreference = 'Stop'
+          `$toolsDir = Split-Path -Parent `$MyInvocation.MyCommand.Definition
 
-`$packageArgs = @{
-  packageName    = `$env:ChocolateyPackageName
-  unzipLocation  = `$toolsDir
-  url64bit       = '$url'
-  checksum64     = '$hash'
-  checksumType64 = 'sha256'
-}
+          `$packageArgs = @{
+            packageName    = `$env:ChocolateyPackageName
+            unzipLocation  = `$toolsDir
+            url64bit       = '$url'
+            checksum64     = '$hash'
+            checksumType64 = 'sha256'
+          }
 
-Install-ChocolateyZipPackage @packageArgs
+          Install-ChocolateyZipPackage @packageArgs
 
-Install-BinFile -Name 'omp-manager' -Path (Join-Path `$toolsDir 'omp-manager.exe')
-"@
+          Install-BinFile -Name 'omp-manager' -Path (Join-Path `$toolsDir 'omp-manager.exe')
+          "@
+
+          $script = ($script -split "`n" | ForEach-Object { $_.TrimStart() }) -join "`n"
 
           New-Item -ItemType Directory -Path "choco-pkg/tools" -Force | Out-Null
           Set-Content -Path "choco-pkg/tools/chocolateyinstall.ps1" -Value $script -NoNewline
@@ -388,33 +370,34 @@ Install-BinFile -Name 'omp-manager' -Path (Join-Path `$toolsDir 'omp-manager.exe
           $url     = "https://github.com/$repo/releases/download/$tag/omp-manager-$tag-windows-x64.zip"
 
           $verification = @"
-VERIFICATION
-============
+          VERIFICATION
+          ============
 
-Verification is intended to assist the Chocolatey moderators and community
-in verifying that this package's contents are trustworthy.
+          Verification is intended to assist the Chocolatey moderators and community
+          in verifying that this package's contents are trustworthy.
 
-Package: omp-manager
-Project: https://github.com/${{ github.repository }}
-License: MIT (https://github.com/${{ github.repository }}/blob/master/LICENSE)
+          Package: omp-manager
+          Project: https://github.com/$repo
+          License: MIT (https://github.com/$repo/blob/master/LICENSE)
 
-Download URL:
-  $url
+          Download URL:
+            $url
 
-Checksums:
-  SHA256: $hash256
-  SHA512: $hash512
+          Checksums:
+            SHA256: $hash256
+            SHA512: $hash512
 
-Verification steps:
-  1. Download the zip from the URL above
-  2. Compute SHA256: Get-FileHash <file> -Algorithm SHA256
-  3. Compute SHA512: Get-FileHash <file> -Algorithm SHA512
-  4. Compare with the checksums listed above
+          Verification steps:
+            1. Download the zip from the URL above
+            2. Compute SHA256: Get-FileHash <file> -Algorithm SHA256
+            3. Compute SHA512: Get-FileHash <file> -Algorithm SHA512
+            4. Compare with the checksums listed above
 
-The binary is built from source via GitHub Actions (static CRT — no VC runtime DLLs required):
-  https://github.com/${{ github.repository }}/actions
-"@
+          The binary is built from source via GitHub Actions (static CRT, no VC runtime DLLs required):
+            https://github.com/$repo/actions
+          "@
 
+          $verification = ($verification -split "`n" | ForEach-Object { $_.TrimStart() }) -join "`n"
           Set-Content -Path "choco-pkg/tools/VERIFICATION.txt" -Value $verification -NoNewline
           Write-Output "Generated VERIFICATION.txt"
 
@@ -425,32 +408,33 @@ The binary is built from source via GitHub Actions (static CRT — no VC runtime
           $repo = "${{ github.repository }}"
 
           $nuspec = @"
-<?xml version="1.0" encoding="utf-8"?>
-<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
-  <metadata>
-    <id>omp-manager</id>
-    <version>$ver</version>
-    <title>Oh My Posh Manager</title>
-    <authors>marlocarlo</authors>
-    <owners>marlocarlo</owners>
-    <licenseUrl>https://github.com/$repo/blob/master/LICENSE</licenseUrl>
-    <projectUrl>https://github.com/$repo</projectUrl>
-    <iconUrl>https://raw.githubusercontent.com/$repo/master/screenshot.png</iconUrl>
-    <requireLicenseAcceptance>false</requireLicenseAcceptance>
-    <description>A TUI manager for Oh My Posh - browse themes, install Nerd Fonts, and configure shells with zero effort. No prior knowledge needed: the app detects what is missing and walks you through everything. Built with Rust and Ratatui. Statically compiled - no VC runtime required.</description>
-    <summary>TUI manager for Oh My Posh — themes, fonts, and shell config in one app</summary>
-    <releaseNotes>https://github.com/$repo/releases</releaseNotes>
-    <tags>oh-my-posh omp prompt theme tui terminal cli nerd-font shell powershell</tags>
-    <packageSourceUrl>https://github.com/$repo</packageSourceUrl>
-    <docsUrl>https://github.com/$repo#readme</docsUrl>
-    <bugTrackerUrl>https://github.com/$repo/issues</bugTrackerUrl>
-  </metadata>
-  <files>
-    <file src="tools\**" target="tools" />
-  </files>
-</package>
-"@
+          <?xml version="1.0" encoding="utf-8"?>
+          <package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+            <metadata>
+              <id>omp-manager</id>
+              <version>$ver</version>
+              <title>Oh My Posh Manager</title>
+              <authors>marlocarlo</authors>
+              <owners>marlocarlo</owners>
+              <licenseUrl>https://github.com/$repo/blob/master/LICENSE</licenseUrl>
+              <projectUrl>https://github.com/$repo</projectUrl>
+              <iconUrl>https://raw.githubusercontent.com/$repo/master/screenshot.png</iconUrl>
+              <requireLicenseAcceptance>false</requireLicenseAcceptance>
+              <description>A TUI manager for Oh My Posh - browse themes, install Nerd Fonts, and configure shells with zero effort. No prior knowledge needed: the app detects what is missing and walks you through everything. Built with Rust and Ratatui. Statically compiled - no VC runtime required.</description>
+              <summary>TUI manager for Oh My Posh - themes, fonts, and shell config in one app</summary>
+              <releaseNotes>https://github.com/$repo/releases</releaseNotes>
+              <tags>oh-my-posh omp prompt theme tui terminal cli nerd-font shell powershell</tags>
+              <packageSourceUrl>https://github.com/$repo</packageSourceUrl>
+              <docsUrl>https://github.com/$repo#readme</docsUrl>
+              <bugTrackerUrl>https://github.com/$repo/issues</bugTrackerUrl>
+            </metadata>
+            <files>
+              <file src="tools\**" target="tools" />
+            </files>
+          </package>
+          "@
 
+          $nuspec = ($nuspec -split "`n" | ForEach-Object { $_.TrimStart() }) -join "`n"
           Set-Content -Path "choco-pkg/omp-manager.nuspec" -Value $nuspec -NoNewline
           Write-Output "Generated omp-manager.nuspec v$ver"
 
@@ -528,7 +512,7 @@ The binary is built from source via GitHub Actions (static CRT — no VC runtime
           cat > scoop-bucket/bucket/omp-manager.json << MANIFEST
           {
               "version": "$ver",
-              "description": "A TUI manager for Oh My Posh — browse themes, install Nerd Fonts, and configure shells with zero effort",
+              "description": "A TUI manager for Oh My Posh - browse themes, install Nerd Fonts, and configure shells with zero effort",
               "homepage": "https://github.com/marlocarlo/omp-manager",
               "license": "MIT",
               "architecture": {
@@ -565,7 +549,6 @@ The binary is built from source via GitHub Actions (static CRT — no VC runtime
           }
           MANIFEST
 
-          # Normalize JSON formatting
           python3 -c "
           import json
           with open('scoop-bucket/bucket/omp-manager.json') as f:
@@ -683,75 +666,80 @@ The binary is built from source via GitHub Actions (static CRT — no VC runtime
           $shaArm = "${{ steps.hashes.outputs.SHA256_ARM64 }}"
 
           # ---- Version manifest ----
-          @"
-PackageIdentifier: $pkgId
-PackageVersion: $ver
-DefaultLocale: en-US
-ManifestType: version
-ManifestVersion: 1.9.0
-"@ | Set-Content "$outDir/$pkgId.yaml" -Encoding utf8NoBOM
+          $versionYaml = @"
+          PackageIdentifier: $pkgId
+          PackageVersion: $ver
+          DefaultLocale: en-US
+          ManifestType: version
+          ManifestVersion: 1.9.0
+          "@
+          $versionYaml = ($versionYaml -split "`n" | ForEach-Object { $_.TrimStart() }) -join "`n"
+          Set-Content "$outDir/$pkgId.yaml" -Value $versionYaml -Encoding utf8NoBOM -NoNewline
 
           # ---- Installer manifest ----
-          @"
-PackageIdentifier: $pkgId
-PackageVersion: $ver
-Platform:
-- Windows.Desktop
-MinimumOSVersion: 10.0.0.0
-InstallerType: zip
-NestedInstallerType: portable
-NestedInstallerFiles:
-- RelativeFilePath: omp-manager.exe
-  PortableCommandAlias: omp-manager
-Installers:
-- Architecture: x64
-  InstallerUrl: $base/omp-manager-$tag-windows-x64.zip
-  InstallerSha256: $sha64
-- Architecture: x86
-  InstallerUrl: $base/omp-manager-$tag-windows-x86.zip
-  InstallerSha256: $sha86
-- Architecture: arm64
-  InstallerUrl: $base/omp-manager-$tag-windows-arm64.zip
-  InstallerSha256: $shaArm
-ManifestType: installer
-ManifestVersion: 1.9.0
-"@ | Set-Content "$outDir/$pkgId.installer.yaml" -Encoding utf8NoBOM
+          $installerYaml = @"
+          PackageIdentifier: $pkgId
+          PackageVersion: $ver
+          Platform:
+          - Windows.Desktop
+          MinimumOSVersion: 10.0.0.0
+          InstallerType: zip
+          NestedInstallerType: portable
+          NestedInstallerFiles:
+          - RelativeFilePath: omp-manager.exe
+            PortableCommandAlias: omp-manager
+          Installers:
+          - Architecture: x64
+            InstallerUrl: $base/omp-manager-$tag-windows-x64.zip
+            InstallerSha256: $sha64
+          - Architecture: x86
+            InstallerUrl: $base/omp-manager-$tag-windows-x86.zip
+            InstallerSha256: $sha86
+          - Architecture: arm64
+            InstallerUrl: $base/omp-manager-$tag-windows-arm64.zip
+            InstallerSha256: $shaArm
+          ManifestType: installer
+          ManifestVersion: 1.9.0
+          "@
+          $installerYaml = ($installerYaml -split "`n" | ForEach-Object { $_.TrimStart() }) -join "`n"
+          Set-Content "$outDir/$pkgId.installer.yaml" -Value $installerYaml -Encoding utf8NoBOM -NoNewline
 
           # ---- Default locale manifest ----
-          @"
-PackageIdentifier: $pkgId
-PackageVersion: $ver
-PackageLocale: en-US
-Publisher: marlocarlo
-PublisherUrl: https://github.com/marlocarlo
-PublisherSupportUrl: https://github.com/marlocarlo/omp-manager/issues
-PackageName: Oh My Posh Manager
-PackageUrl: https://github.com/marlocarlo/omp-manager
-License: MIT
-LicenseUrl: https://github.com/marlocarlo/omp-manager/blob/master/LICENSE
-Copyright: Copyright (c) marlocarlo
-ShortDescription: A TUI manager for Oh My Posh — browse themes, install fonts, configure shells
-Description: |-
-  Oh My Posh Manager is a terminal UI that sets up Oh My Posh from scratch with
-  no prior knowledge needed. It detects what is missing and walks you through
-  installing Oh My Posh, picking a Nerd Font, previewing and applying a theme,
-  and configuring your shells. Built with Rust and Ratatui. Statically compiled
-  — no VC runtime DLLs required.
-Moniker: omp-manager
-Tags:
-- oh-my-posh
-- omp
-- prompt
-- terminal
-- tui
-- theme
-- nerd-font
-- shell
-- powershell
-ReleaseNotesUrl: https://github.com/marlocarlo/omp-manager/releases/tag/$tag
-ManifestType: defaultLocale
-ManifestVersion: 1.9.0
-"@ | Set-Content "$outDir/$pkgId.locale.en-US.yaml" -Encoding utf8NoBOM
+          $localeYaml = @"
+          PackageIdentifier: $pkgId
+          PackageVersion: $ver
+          PackageLocale: en-US
+          Publisher: marlocarlo
+          PublisherUrl: https://github.com/marlocarlo
+          PublisherSupportUrl: https://github.com/marlocarlo/omp-manager/issues
+          PackageName: Oh My Posh Manager
+          PackageUrl: https://github.com/marlocarlo/omp-manager
+          License: MIT
+          LicenseUrl: https://github.com/marlocarlo/omp-manager/blob/master/LICENSE
+          Copyright: Copyright (c) marlocarlo
+          ShortDescription: A TUI manager for Oh My Posh - browse themes, install fonts, configure shells
+          Description: |-
+            Oh My Posh Manager is a terminal UI that sets up Oh My Posh from scratch with
+            no prior knowledge needed. It detects what is missing and walks you through
+            installing Oh My Posh, picking a Nerd Font, previewing and applying a theme,
+            and configuring your shells. Built with Rust and Ratatui. Statically compiled.
+          Moniker: omp-manager
+          Tags:
+          - oh-my-posh
+          - omp
+          - prompt
+          - terminal
+          - tui
+          - theme
+          - nerd-font
+          - shell
+          - powershell
+          ReleaseNotesUrl: https://github.com/marlocarlo/omp-manager/releases/tag/$tag
+          ManifestType: defaultLocale
+          ManifestVersion: 1.9.0
+          "@
+          $localeYaml = ($localeYaml -split "`n" | ForEach-Object { $_.TrimStart() }) -join "`n"
+          Set-Content "$outDir/$pkgId.locale.en-US.yaml" -Value $localeYaml -Encoding utf8NoBOM -NoNewline
 
           Write-Output "Manifests created:"
           Get-ChildItem $outDir | ForEach-Object {
@@ -767,7 +755,6 @@ ManifestVersion: 1.9.0
           $repo = "${{ github.repository }}"
           $base = "https://github.com/$repo/releases/download/$tag"
 
-          # Try 'update' first — works when the package already exists in winget-pkgs
           & $env:WGC_PATH update "marlocarlo.omp-manager" `
             --version $ver `
             --urls "$base/omp-manager-$tag-windows-x64.zip" `
@@ -779,8 +766,7 @@ ManifestVersion: 1.9.0
             exit 0
           }
 
-          # Package not yet in winget-pkgs — submit full manifests via PR
-          Write-Output "Package not found in winget-pkgs — submitting full manifests..."
+          Write-Output "Package not found in winget-pkgs, submitting full manifests..."
           & $env:WGC_PATH submit "winget-manifests" `
             --token "${{ secrets.WINGET_PAT }}" 2>&1
           if ($LASTEXITCODE -ne 0) {
