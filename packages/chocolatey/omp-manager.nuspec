@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ============================================================================
+     TEMPLATE ONLY — the workflow generates the real nuspec at publish time.
+     ============================================================================ -->
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>omp-manager</id>
+    <version>0.1.2</version>
+    <title>Oh My Posh Manager</title>
+    <authors>marlocarlo</authors>
+    <owners>marlocarlo</owners>
+    <licenseUrl>https://github.com/marlocarlo/omp-manager/blob/master/LICENSE</licenseUrl>
+    <projectUrl>https://github.com/marlocarlo/omp-manager</projectUrl>
+    <iconUrl>https://raw.githubusercontent.com/marlocarlo/omp-manager/master/screenshot.png</iconUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>A TUI manager for Oh My Posh - browse themes, install Nerd Fonts, and configure shells with zero effort. No prior knowledge needed: the app detects what is missing and walks you through everything. Built with Rust and Ratatui. Statically compiled - no VC runtime required.</description>
+    <summary>TUI manager for Oh My Posh — themes, fonts, and shell config in one app</summary>
+    <releaseNotes>https://github.com/marlocarlo/omp-manager/releases</releaseNotes>
+    <tags>oh-my-posh omp prompt theme tui terminal cli nerd-font shell powershell</tags>
+    <packageSourceUrl>https://github.com/marlocarlo/omp-manager</packageSourceUrl>
+    <docsUrl>https://github.com/marlocarlo/omp-manager#readme</docsUrl>
+    <bugTrackerUrl>https://github.com/marlocarlo/omp-manager/issues</bugTrackerUrl>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>

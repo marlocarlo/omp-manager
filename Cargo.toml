@@ -9,6 +9,13 @@ keywords = ["oh-my-posh", "prompt", "theme", "tui", "terminal"]
 categories = ["command-line-utilities"]
 repository = "https://github.com/marlocarlo/omp-manager"
 homepage = "https://github.com/marlocarlo/omp-manager"
+exclude = [
+    "target/",
+    "packages/",
+    "scoop/",
+    ".github/",
+    "screenshot.png",
+]
 
 [dependencies]
 ratatui = "0.29"

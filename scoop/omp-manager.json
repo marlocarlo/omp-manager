@@ -1,0 +1,35 @@
+{
+    "version": "0.1.2",
+    "description": "A TUI manager for Oh My Posh — browse themes, install Nerd Fonts, and configure shells with zero effort",
+    "homepage": "https://github.com/marlocarlo/omp-manager",
+    "license": "MIT",
+    "notes": "For automatic updates, add the bucket: scoop bucket add omp-manager https://github.com/marlocarlo/scoop-omp-manager",
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/marlocarlo/omp-manager/releases/download/v0.1.2/omp-manager-v0.1.2-windows-x64.zip"
+        },
+        "32bit": {
+            "url": "https://github.com/marlocarlo/omp-manager/releases/download/v0.1.2/omp-manager-v0.1.2-windows-x86.zip"
+        },
+        "arm64": {
+            "url": "https://github.com/marlocarlo/omp-manager/releases/download/v0.1.2/omp-manager-v0.1.2-windows-arm64.zip"
+        }
+    },
+    "bin": ["omp-manager.exe"],
+    "checkver": {
+        "github": "https://github.com/marlocarlo/omp-manager"
+    },
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/marlocarlo/omp-manager/releases/download/v$version/omp-manager-v$version-windows-x64.zip"
+            },
+            "32bit": {
+                "url": "https://github.com/marlocarlo/omp-manager/releases/download/v$version/omp-manager-v$version-windows-x86.zip"
+            },
+            "arm64": {
+                "url": "https://github.com/marlocarlo/omp-manager/releases/download/v$version/omp-manager-v$version-windows-arm64.zip"
+            }
+        }
+    }
+}

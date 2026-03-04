@@ -12,10 +12,16 @@ Built with **Rust**, **Ratatui**, and a PowerShell-blue color scheme.
 
 ## Installation
 
-### Cargo (from crates.io)
+### Cargo (all platforms)
 
 ```sh
 cargo install omp-manager
+```
+
+### WinGet (Windows)
+
+```sh
+winget install marlocarlo.omp-manager
 ```
 
 ### Chocolatey (Windows)
@@ -24,13 +30,30 @@ cargo install omp-manager
 choco install omp-manager
 ```
 
-### Winget (Windows)
+### Scoop (Windows)
 
-```sh
-winget install marlocarlo.omp-manager
+```powershell
+scoop bucket add omp-manager https://github.com/marlocarlo/scoop-omp-manager
+scoop install omp-manager
 ```
 
-### From source
+### Manual (all platforms)
+
+Download the pre-built binary for your platform from the [latest release](https://github.com/marlocarlo/omp-manager/releases/latest), extract, and put `omp-manager` (or `omp-manager.exe`) anywhere on your `PATH`.
+
+| Platform | Archive |
+|----------|---------|
+| Windows x64 | `omp-manager-vX.Y.Z-windows-x64.zip` |
+| Windows x86 | `omp-manager-vX.Y.Z-windows-x86.zip` |
+| Windows ARM64 | `omp-manager-vX.Y.Z-windows-arm64.zip` |
+| Linux x64 | `omp-manager-vX.Y.Z-linux-x64.tar.gz` |
+| Linux ARM64 | `omp-manager-vX.Y.Z-linux-arm64.tar.gz` |
+| macOS Intel | `omp-manager-vX.Y.Z-macos-x64.tar.gz` |
+| macOS Apple Silicon | `omp-manager-vX.Y.Z-macos-arm64.tar.gz` |
+
+> **Windows note:** All Windows binaries are statically compiled — no VC runtime DLLs required.
+
+### Build from source
 
 ```sh
 git clone https://github.com/marlocarlo/omp-manager.git
